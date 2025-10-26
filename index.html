@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Mapa São Miguel">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="theme-color" content="#ffffff"> <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon-192.png">
+
+    <title>Magiczna Mapa Offline: São Miguel</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script src="https://unpkg.com/leaflet-terminator@1.0.0/L.Terminator.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.8.0/suncalc.min.js"></script>
+
+    <style>
+        /* ... (wszystkie style z poprzedniej wersji bez zmian)... */
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: #f0f0f0; display: flex; flex-direction: column; height: 100vh; }
+        .header { text-align: center; padding: 10px; background-color: white; border-bottom: 1px solid #ddd; flex-shrink: 0; }
+        h1 { margin: 0; color: #333; }
+        #locate-btn { display: block; width: 90%; max-width: 400px; margin: 10px auto; padding: 10px; font-size: 14px; font-weight: bold; color: white; background-color: #007bff; border: none; border-radius: 8px; cursor: pointer; transition: background-color 0.2s; flex-shrink: 0; }
+        #locate-btn:hover { background-color: #0056b3; }
+        .main-container { display: flex; flex-grow: 1; overflow: hidden; flex-direction: column-reverse; }
+        #map { height: 100%; width: 100%; flex-grow: 1; position: relative; } /* Dodano position: relative dla PWA info */
+        #route-planner { width: 100%; height: 280px; background: #fff; border-top: 2px solid #ccc; overflow-y: hidden; display: flex; flex-direction: column; padding: 10px; box-sizing: border-box; flex-shrink: 0; }
+        @media (min-width: 768px) { .main-container { flex-direction: row; } #route-planner { width: 300px; height: 100%; border-top: none; border-left: 2px solid #ccc; } #locate-btn { order: -1; } }
+        #planner-title { margin: 0 0 10px; text-align: center; border-bottom: 1px solid #eee; padding-bottom: 10px; font-size: 16px; flex-shrink: 0; color: #333; }
+        #plan-tabs-container { display: flex; flex-wrap: nowrap; overflow-x: auto; border-bottom: 2px solid #ccc; padding-bottom: 5px; margin-bottom: 5px; -webkit-overflow-scrolling: touch; flex-shrink: 0; }
+        .plan-tab { padding: 8px 12px; cursor: pointer; background-color: #f0f0f0; border: 1px solid #ddd; border-radius: 4px 4px 0 0; margin-right: 4px; font-size: 13px; font-weight: 500; white-space: nowrap; display: flex; align-items: center; }
+        .plan-tab.active { background-color: #fff; border-bottom-color: #fff; color: #007bff; font-weight: bold; }
+        .plan-tab .tab-icon { margin-left: 8px; font-size: 14px; color: #aaa; cursor: pointer; }
+        .plan-tab .tab-icon:hover { color: #007bff; } .plan-tab .delete-day-btn:hover { color: #d9534f; }
+        #add-day-btn { padding: 8px 12px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        #route-list { list-style-type: decimal; padding-left: 20px; margin: 0; flex-grow: 1; overflow-y: auto; padding: 5px; }
+        #route-list li { font-size: 14px; margin: 5px 0; padding: 5px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; cursor: grab; background-color: #f9f9f9; border: 1px solid #eee; }
+        #route-list li button { background: none; border: none; color: red; cursor: pointer; font-size: 16px; flex-shrink: 0; }
+        #route-list li.dragging { opacity: 0.5; background: #e0e0e0; }
+        .route-buttons { margin-top: 10px; display: flex; gap: 10px; flex-shrink: 0; }
+        .route-btn { flex: 1; padding: 10px; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; font-size: 14px; }
+        .route-btn.google { background-color: #4285F4; } .route-btn.apple { background-color: #000000; } .route-btn:disabled { background-color: #aaa; cursor: not-allowed; }
+        .emoji-icon { font-size: 24px; text-align: center; line-height: 30px; border: 2px solid white; border-radius: 50%; width: 30px; height: 30px; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
+        .emoji-icon-view { background-color: #4285F4; } .emoji-icon-water { background-color: #17a2b8; } .emoji-icon-culture { background-color: #fbbc05; } .emoji-icon-food { background-color: #e84393; }
+        .info-tags { margin: 10px 0 5px; padding-top: 10px; border-top: 1px solid #eee; } .info-tag { display: inline-block; font-size: 12px; background-color: #eee; border-radius: 4px; padding: 3px 6px; margin: 2px; color: #333; }
+        .leaflet-popup-content h3 { margin: 0 0 10px; color: #005A31; } .leaflet-popup-content p { margin: 5px 0; font-size: 14px; } .nav-links { margin-top: 10px; } .popup-button { display: inline-block; padding: 5px 10px; margin: 5px 5px 0 0; border-radius: 4px; text-decoration: none; color: white !important; font-weight: bold; font-size: 12px; border: none; cursor: pointer; } .nav-google { background-color: #4285F4; } .nav-apple { background-color: #000000; } .nav-webcam { background-color: #ffc107; color: #333 !important; } .nav-add-route { background-color: #17a2b8; }
+        .notes-section { margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px; } .notes-section label { font-weight: bold; font-size: 12px; color: #555; } .notes-section textarea { width: 95%; height: 60px; border: 1px solid #ccc; border-radius: 4px; margin-top: 5px; font-family: inherit; font-size: 13px; } .notes-section button { font-size: 12px; padding: 3px 8px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 5px; }
+        .sun-info { font-size: 11px; background: #fffbef; border: 1px solid #ffeeba; border-radius: 4px; padding: 5px 8px; margin-top: 10px; color: #555; line-height: 1.4; }
+        .nearby-section { margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px; } .nearby-section h4 { font-size: 13px; font-weight: bold; color: #333; margin: 0 0 5px 0; } .nearby-list { list-style-type: none; padding: 0; margin: 0; } .nearby-list li { font-size: 12px; padding: 3px 0; cursor: pointer; color: #007bff; text-decoration: underline; background: none; border: none; } .nearby-list li:hover { color: #0056b3; } .nearby-list li span { color: #666; font-weight: normal; }
+        #modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 10000; display: flex; align-items: center; justify-content: center; } #modal-content { background: white; padding: 20px; border-radius: 8px; width: 90%; max-width: 350px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); } #modal-content h4 { margin: 0 0 5px 0; font-size: 16px; color: #333; } #modal-attraction-name { margin: 0 0 15px 0; font-size: 18px; font-weight: bold; color: #005A31; } #modal-day-list { list-style-type: none; padding: 0; margin: 0 0 15px 0; max-height: 200px; overflow-y: auto; } #modal-day-list li { background: #f0f0f0; padding: 12px; border-radius: 5px; margin-bottom: 5px; font-weight: 500; cursor: pointer; } #modal-day-list li:hover { background: #e0e0e0; } .modal-button { width: 100%; padding: 10px; border: none; border-radius: 5px; font-size: 14px; font-weight: bold; cursor: pointer; margin-top: 5px; } #modal-add-new-day-btn { background-color: #28a745; color: white; } #modal-close-btn { background-color: #6c757d; color: white; } .modal-hidden { display: none !important; }
+        .weather-info { font-size: 12px; background: #eef7ff; border: 1px solid #bde0ff; border-radius: 4px; padding: 8px; margin-top: 10px; color: #333; text-align: center; }
+        .weather-info img { vertical-align: middle; margin-right: 5px; width: 25px; height: 25px; }
+        .weather-loading, .weather-error { color: #888; font-style: italic; } .weather-error { color: #dc3545; font-weight: bold; }
+        /* Info PWA */
+        #pwa-install-info { position: absolute; bottom: 10px; left: 10px; background: rgba(0,0,0,0.7); color: white; padding: 5px 10px; border-radius: 4px; font-size: 12px; z-index: 1000; display: none; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Centrum dowodzenia Azorki</h1>
+    </div>
+
+    <button id="locate-btn">Pokaż moją lokalizację 📍</button>
+
+    <div class="main-container">
+        <div id="route-planner">
+            <h3 id="planner-title">Moje Plany</h3>
+            <div id="plan-tabs-container">
+                <button id="add-day-btn">+</button>
+            </div>
+            <ul id="route-list"></ul>
+            <div class="route-buttons">
+                <button id="generate-google-route-btn" class="route-btn google" disabled>Generuj (Google)</button>
+                <button id="generate-apple-route-btn" class="route-btn apple" disabled>Generuj (Apple)</button>
+            </div>
+        </div>
+        <div id="map">
+             <div id="pwa-install-info">Możesz dodać tę mapę do ekranu głównego!</div>
+        </div>
+    </div>
+
+    <div id="modal-overlay" class="modal-hidden">
+        <div id="modal-content">
+            <h4>Dodaj do planu:</h4>
+            <h3 id="modal-attraction-name">Nazwa Atrakcji</h3>
+            <ul id="modal-day-list"></ul>
+            <button id="modal-add-new-day-btn" class="modal-button">+ Utwórz nowy dzień i dodaj</button>
+            <button id="modal-close-btn" class="modal-button">Anuluj</button>
+        </div>
+    </div>
+
+    <script>
+        // --- Krok 0: Zmienne globalne ---
+        let allPlans = [ { name: "Dzień 1", waypoints: [] } ];
+        let activePlanIndex = 0;
+        let attractionToAdd = null;
+        const markerRegistry = {};
+        const openWeatherApiKey = '973312f626c4711ae9981d27961245e1'; // <--- WKLEJ TUTAJ SWÓJ KLUCZ API !!!
+
+        // Referencje DOM
+        const routeListUI = document.getElementById('route-list');
+        const generateGoogleRouteBtn = document.getElementById('generate-google-route-btn');
+        const generateAppleRouteBtn = document.getElementById('generate-apple-route-btn');
+        const planTabsContainer = document.getElementById('plan-tabs-container');
+        const addDayBtn = document.getElementById('add-day-btn');
+        const modalOverlay = document.getElementById('modal-overlay');
+        const modalAttractionName = document.getElementById('modal-attraction-name');
+        const modalDayList = document.getElementById('modal-day-list');
+        const modalAddNewDayBtn = document.getElementById('modal-add-new-day-btn');
+        const modalCloseBtn = document.getElementById('modal-close-btn');
+        const pwaInstallInfo = document.getElementById('pwa-install-info');
+
+        // --- Krok 1: Definicja danych (bez zmian) ---
+        const attractions = [
+             // ... (cała, długa tablica 'attractions' jest tutaj - bez zmian) ...
+            { id: "sete_cidades", name: "Sete Cidades (Vista do Rei)", category: "view", coords: [37.8697, -25.7958], desc: "Najsłynniejszy widok na Azorach...", info: "Wstęp: Wolny | Parking: Tak | WC: Tak", webcam: "https://spotazores.com/webcam/sao-miguel/sete-cidades-lagoa/", link: "https://www.visitazores.com/en/places/vista-do-rei-viewpoint" },
+            { id: "lagoa_fogo", name: "Lagoa do Fogo", category: "view", coords: [37.7667, -25.4917], desc: "Rezerwat przyrody 'Jezioro Ognia'...", info: "Wstęp: Wolny | Parking: Tak (ograniczony)", webcam: "https://spotazores.com/webcam/sao-miguel/lagoa-do-fogo/", link: "https://maps.app.goo.gl/yJt6Bq5z7v7dSYnZ7" },
+            { id: "boca_inferno", name: "Miradouro da Boca do Inferno", category: "view", coords: [37.8542, -25.7836], desc: "Spektakularny punkt widokowy...", info: "Wstęp: Wolny | Parking: Tak (mały)", webcam: "https://spotazores.com/webcam/sao-miguel/sete-cidades-cumeeiras/", link: "https://maps.app.goo.gl/Fk98UfX4o3hK9m1aA" },
+            { id: "ponta_sossego", name: "Miradouro da Ponta do Sossego", category: "view", coords: [37.8200, -25.1764], desc: "Przepiękny ogród na klifach...", info: "Wstęp: Wolny | Parking: Tak | WC: Tak | Grill: Tak", webcam: null, link: "https://www.visitazores.com/en/places/ponta-do-sossego-viewpoint" },
+            { id: "terra_nostra", name: "Parque Terra Nostra", category: "water", coords: [37.7725, -25.3158], desc: "Ogród botaniczny z basenem termalnym.", info: "Wstęp: ok. €10 | Parking: Trudny | WC: Tak | Prysznic: Tak", webcam: "https://spotazores.com/webcam/sao-miguel/furnas/", link: "https://www.terranostragarden.com/" },
+            { id: "dona_beija", name: "Poça da Dona Beija", category: "water", coords: [37.7715, -25.3115], desc: "Kompleks 5 basenów termalnych.", info: "Wstęp: ok. €8 | Parking: Tak (płatny) | WC: Tak | Prysznic: Tak", webcam: "https://spotazores.com/webcam/sao-miguel/furnas/", link: "https://www.tripadvisor.com/Attraction_Review-g189134-d2433722-Reviews-Poca_da_Dona_Beija-Furnas_Povoacao_Sao_Miguel_Azores.html" },
+            { id: "caldeira_velha", name: "Caldeira Velha", category: "water", coords: [37.7808, -25.5036], desc: "Baseny termalne i wodospad.", info: "Wstęp: ok. €10 | Parking: Tak (ograniczony) | WC: Tak | Prysznic: Tak", webcam: null, link: "https://www.visitazores.com/en/places/caldeira-velha-environmental-interpretation-centre" },
+            { id: "mosteiros", name: "Mosteiros (Piscinas Naturais)", category: "water", coords: [37.8925, -25.8233], desc: "Naturalne baseny lawowe...", info: "Wstęp: Wolny | Parking: Tak | WC: Tak (sezonowo)", webcam: "https://spotazores.com/webcam/sao-miguel/mosteiros-pocas/", link: "https://maps.app.goo.gl/3Gf3zEwGj23XvW6n8" },
+            { id: "gorreana", name: "Plantações de Chá Gorreana", category: "culture", coords: [37.8205, -25.4125], desc: "Jedyna plantacja herbaty w Europie.", info: "Wstęp: Wolny | Parking: Tak | WC: Tak", webcam: null, link: "https://gorreana.pt/en/" },
+            { id: "ponta_delgada", name: "Ponta Delgada (Portas da Cidade)", category: "culture", coords: [37.7394, -25.6698], desc: "Historyczne bramy miasta...", info: "Wstęp: Wolny | Parking: Trudny", webcam: null, link: "https://www.tripadvisor.com/Attraction_Review-g189135-d549301-Reviews-Portas_da_Cidade-Ponta_Delgada_Sao_Miguel_Azores.html" },
+            { id: "tonys", name: "Restaurante Tony's (Cozido)", category: "food", coords: [37.7738, -25.3148], desc: "Najsłynniejsze 'Cozido das Furnas'.", info: "Konieczna rezerwacja!", webcam: "https://spotazores.com/webcam/sao-miguel/furnas/", link: "https://www.tripadvisor.pt/Restaurant_Review-g189134-d1024340-Reviews-Tony_s_Restaurant-Furnas_Povoacao_Sao_Miguel_Azores.html" },
+            { id: "a_tasca", name: "A Tasca (Ponta Delgada)", category: "food", coords: [37.7409, -25.6706], desc: "Kultowe tapas i owoce morza.", info: "Przygotuj się na kolejkę!", webcam: null, link: "https://www.tripadvisor.com/Restaurant_Review-g189135-d2422030-Reviews-A_Tasca-Ponta_Delgada_Sao_Miguel_Azores.html" }
+        ];
+
+        // --- Krok 2: Inicjalizacja mapy ---
+        const map = L.map('map').setView([37.79, -25.48], 10);
+
+        // --- ZMIANA: Dodajemy warstwy bazowe ---
+        const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19, attribution: '© OpenStreetMap'
+        });
+        const terrainLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+             maxZoom: 17, attribution: '© OpenTopoMap (CC-BY-SA)'
+        });
+        // --- Koniec zmiany ---
+
+        osmLayer.addTo(map); // Domyślna warstwa
+
+        // --- Krok 3: Definicja Warstw Atrakcji (bez zmian) ---
+        const viewpointsLayer = L.layerGroup(), waterLayer = L.layerGroup(), cultureLayer = L.layerGroup(), foodLayer = L.layerGroup();
+        const markerClusterGroup = L.markerClusterGroup();
+
+        // --- Krok 4: Definicje ikon Emoji (bez zmian) ---
+        const createEmojiIcon = (emoji, className) => L.divIcon({ html: `<span class="emoji-icon ${className}">${emoji}</span>`, className: '', iconSize: [30, 30], iconAnchor: [15, 15] });
+        const icons = { view: createEmojiIcon('🌅', 'emoji-icon-view'), water: createEmojiIcon('♨️', 'emoji-icon-water'), culture: createEmojiIcon('🏛️', 'emoji-icon-culture'), food: createEmojiIcon('🍽️', 'emoji-icon-food') };
+
+        // --- Krok 5: Funkcje pomocnicze ---
+        function saveNote(id) { localStorage.setItem(`note_${id}`, document.getElementById(`note-${id}`).value); alert('Notatka zapisana!'); }
+        function loadNote(id) { const el = document.getElementById(`note-${id}`); if(el) el.value = localStorage.getItem(`note_${id}`) || ''; }
+        function getDistance(coords1, coords2) { function toRad(x) { return x * Math.PI / 180; } const R = 6371; const dLat = toRad(coords2[0] - coords1[0]); const dLon = toRad(coords2[1] - coords1[1]); const lat1 = toRad(coords1[0]); const lat2 = toRad(coords2[0]); const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.sin(dLon/2) * Math.sin(dLon/2) * Math.cos(lat1) * Math.cos(lat2); const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); return R * c; }
+        function formatTime(date) { return date.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' }); }
+        function findAndOpenMarker(id) { const markerToOpen = markerRegistry[id]; if (!markerToOpen) return; markerClusterGroup.zoomToShowLayer(markerToOpen, () => markerToOpen.openPopup()); }
+
+        // --- Funkcje Modala ---
+        function openDayPicker(id, name, coords) { attractionToAdd = { id, name, coords }; modalAttractionName.textContent = name; renderDayPickerList(); modalOverlay.classList.remove('modal-hidden'); }
+        function closeDayPicker() { modalOverlay.classList.add('modal-hidden'); attractionToAdd = null; }
+        function renderDayPickerList() { modalDayList.innerHTML = ''; allPlans.forEach((plan, index) => { const li = document.createElement('li'); li.textContent = plan.name; li.onclick = () => addToSpecificDay(index); modalDayList.appendChild(li); }); }
+        function addToSpecificDay(dayIndex) {
+            if (!attractionToAdd) return;
+            const plan = allPlans[dayIndex];
+            if (plan.waypoints.find(p => p.id === attractionToAdd.id)) { alert(`"${attractionToAdd.name}" jest już w planie "${plan.name}".`); }
+            else { plan.waypoints.push(attractionToAdd); alert(`Dodano "${attractionToAdd.name}" do "${plan.name}"!`); }
+            closeDayPicker();
+            if (dayIndex === activePlanIndex) updateRouteList();
+        }
+        modalAddNewDayBtn.onclick = () => { const newDayName = prompt("Podaj nazwę nowego dnia:", `Dzień ${allPlans.length + 1}`); if (newDayName) { allPlans.push({ name: newDayName, waypoints: [] }); renderPlanTabs(); addToSpecificDay(allPlans.length - 1); } };
+        modalCloseBtn.onclick = closeDayPicker;
+        // --- Koniec Modala ---
+
+        function removeFromRoute(id) { const activePlan = allPlans[activePlanIndex]; activePlan.waypoints = activePlan.waypoints.filter(p => p.id !== id); updateRouteList(); }
+        function updateRouteList() {
+            routeListUI.innerHTML = '';
+            if (!allPlans[activePlanIndex]) { activePlanIndex = 0; if (!allPlans[activePlanIndex]) allPlans.push({ name: "Dzień 1", waypoints: [] }); }
+            const activeWaypoints = allPlans[activePlanIndex].waypoints;
+            if (activeWaypoints.length === 0) { routeListUI.innerHTML = '<li style="list-style-type: none; color: #777; cursor: default; background: none; border: none;">Dodaj punkty z mapy...</li>'; generateGoogleRouteBtn.disabled = true; generateAppleRouteBtn.disabled = true; }
+            else { activeWaypoints.forEach(point => { const li = document.createElement('li'); li.textContent = point.name; li.draggable = true; li.dataset.id = point.id; const removeBtn = document.createElement('button'); removeBtn.innerHTML = '×'; removeBtn.title = 'Usuń'; removeBtn.onclick = (e) => { e.stopPropagation(); removeFromRoute(point.id); }; li.appendChild(removeBtn); routeListUI.appendChild(li); }); const enabled = activeWaypoints.length >= 2; generateGoogleRouteBtn.disabled = !enabled; generateAppleRouteBtn.disabled = !enabled; }
+        }
+        function renderPlanTabs() {
+            const fragment = document.createDocumentFragment();
+            allPlans.forEach((plan, index) => {
+                const tab = document.createElement('div'); tab.className = 'plan-tab';
+                const nameSpan = document.createElement('span'); nameSpan.textContent = plan.name; tab.appendChild(nameSpan);
+                tab.dataset.index = index; if (index === activePlanIndex) tab.classList.add('active');
+                const renameBtn = document.createElement('span'); renameBtn.className = 'tab-icon rename-day-btn'; renameBtn.innerHTML = '✏️'; renameBtn.title = 'Zmień nazwę'; renameBtn.onclick = (e) => { e.stopPropagation(); renameDay(index); }; tab.appendChild(renameBtn);
+                const deleteBtn = document.createElement('span'); deleteBtn.className = 'tab-icon delete-day-btn'; deleteBtn.innerHTML = '×'; deleteBtn.title = 'Usuń ten dzień'; deleteBtn.onclick = (e) => { e.stopPropagation(); if (confirm(`Czy na pewno chcesz usunąć "${plan.name}"?`)) removeDay(index); }; tab.appendChild(deleteBtn);
+                tab.onclick = () => switchDay(index); fragment.appendChild(tab);
+            });
+            const existingTabs = planTabsContainer.querySelectorAll('.plan-tab'); existingTabs.forEach(tab => planTabsContainer.removeChild(tab));
+            planTabsContainer.insertBefore(fragment, addDayBtn);
+        }
+        function renameDay(index) { const currentName = allPlans[index].name; const newName = prompt(`Zmień nazwę dla "${currentName}":`, currentName); if (newName && newName !== currentName) { allPlans[index].name = newName; renderPlanTabs(); } }
+        function switchDay(index) { activePlanIndex = index; renderPlanTabs(); updateRouteList(); }
+        function removeDay(index) { allPlans.splice(index, 1); if (allPlans.length === 0) allPlans.push({ name: "Dzień 1", waypoints: [] }); activePlanIndex = Math.min(activePlanIndex, allPlans.length - 1); if (activePlanIndex < 0) activePlanIndex = 0; renderPlanTabs(); updateRouteList(); }
+        addDayBtn.onclick = () => { const newDayName = prompt("Podaj nazwę nowego dnia:", `Dzień ${allPlans.length + 1}`); if (newDayName) { allPlans.push({ name: newDayName, waypoints: [] }); switchDay(allPlans.length - 1); } };
+
+        // --- NOWA FUNKCJA: Pobieranie i wyświetlanie pogody ---
+        async function fetchWeather(lat, lon, elementId) {
+            const weatherElement = document.getElementById(elementId);
+            if (!weatherElement) return;
+
+            if (!openWeatherApiKey || openWeatherApiKey === '973312f626c4711ae9981d27961245e1') {
+                 weatherElement.innerHTML = `<span class="weather-error">Brak klucza API Pogody!</span>`;
+                 return;
+            }
+
+            weatherElement.innerHTML = `<span class="weather-loading">Ładuję pogodę...</span>`;
+            const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${openWeatherApiKey}&units=metric&lang=pl`;
+
+            try {
+                // Spróbuj pobrać z sieci LUB z cache (Service Worker się tym zajmie)
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`Błąd: ${response.status}`);
+                const data = await response.json();
+
+                const temp = Math.round(data.main.temp);
+                const desc = data.weather[0].description;
+                const icon = data.weather[0].icon;
+                const iconUrl = `https://openweathermap.org/img/wn/${icon}.png`;
+
+                weatherElement.innerHTML = `
+                    <img src="${iconUrl}" alt="${desc}">
+                    ${temp}°C, ${desc}
+                `;
+            } catch (error) {
+                console.error("Błąd pobierania pogody:", error);
+                weatherElement.innerHTML = `<span class="weather-error">Nie udało się załadować pogody</span>`;
+            }
+        }
+
+        // --- Krok 6: Logika Generowania Tras (bez zmian) ---
+        generateGoogleRouteBtn.addEventListener('click', () => { const waypoints = allPlans[activePlanIndex].waypoints; if (waypoints.length < 2) return; const url = 'https://www.google.com/url?sa=E&source=gmail&q=https://maps.app.goo.gl/yJt6Bq5z7v7dSYnZ7' + waypoints.map(p => `${p.coords[0]},${p.coords[1]}`).join('/'); window.open(url, '_blank'); });
+        generateAppleRouteBtn.addEventListener('click', () => { const waypoints = allPlans[activePlanIndex].waypoints; if (waypoints.length < 2) return; const waypointsString = waypoints.map(p => `${p.coords[0]},${p.coords[1]}`).join('+to:'); const url = `http://maps.apple.com/?saddr=Current%20Location&daddr=${waypointsString}`; window.open(url, '_blank'); });
+
+        // --- Krok 7: Przetwarzanie Atrakcji ---
+        attractions.forEach(attr => {
+            let nearbyHTML = ''; const nearbyPoints = attractions.map(p => ({ id: p.id, name: p.name, dist: getDistance(attr.coords, p.coords) })).filter(p => p.id !== attr.id).sort((a, b) => a.dist - b.dist).slice(0, 3); nearbyHTML = '<ul class="nearby-list">'; nearbyPoints.forEach(p => { nearbyHTML += `<li onclick="findAndOpenMarker('${p.id}')">${p.name} <span>(${p.dist.toFixed(1)} km)</span></li>`; }); nearbyHTML += '</ul>';
+            let sunInfoHTML = ''; if (attr.category === 'view' || attr.id === 'mosteiros') { const times = SunCalc.getTimes(new Date(), attr.coords[0], attr.coords[1]); sunInfoHTML = `<div class="sun-info"><strong>Dziś:</strong><br>🌅 Wschód: ${formatTime(times.sunrise)} | 🌇 Zachód: ${formatTime(times.sunset)}<br>✨ Złota Godzina (wieczór): ok. ${formatTime(times.goldenHour)}</div>`; }
+            const googleMapsLink = `https://www.google.com/maps/dir/?api=1&destination=${attr.coords[0]},${attr.coords[1]}`; const appleMapsLink = `http://maps.apple.com/?daddr=${attr.coords[0]},${attr.coords[1]}`;
+            let webcamButton = attr.webcam ? `<a href="${attr.webcam}" target="_blank" class="popup-button nav-webcam">Sprawdź Kamerę 🎥</a>` : ''; let infoTagsHTML = ''; if (attr.info) { infoTagsHTML = '<div class="info-tags">'; attr.info.split('|').forEach(tag => { infoTagsHTML += `<span class="info-tag">${tag.trim()}</span>`; }); infoTagsHTML += '</div>'; }
+
+            // ZMIANA: Dodajemy DIV dla pogody
+            const popupContent = `
+                <h3>${attr.name}</h3>
+                <div class="weather-info weather-loading" id="weather-${attr.id}">Ładowanie pogody...</div>
+                ${infoTagsHTML} ${sunInfoHTML} <p>${attr.desc}</p>
+                <div class="nav-links">
+                    <a href="${googleMapsLink}" target="_blank" class="popup-button nav-google">Google</a>
+                    <a href="${appleMapsLink}" target="_blank" class="popup-button nav-apple">Apple</a>
+                    ${webcamButton}
+                    <button class="popup-button nav-add-route" onclick="openDayPicker('${attr.id}', '${attr.name.replace(/'/g, "\\'")}', [${attr.coords}])">
+                        + Dodaj do Planu
+                    </button>
+                </div>
+                <div class="nearby-section"><h4>W pobliżu (kliknij, by przejść):</h4>${nearbyHTML}</div>
+                <div class="notes-section">
+                    <label for="note-${attr.id}">Moje notatki:</label>
+                    <textarea id="note-${attr.id}"></textarea>
+                    <button onclick="saveNote('${attr.id}')">Zapisz</button>
+                </div>
+            `;
+            const marker = L.marker(attr.coords, { icon: icons[attr.category] || L.Icon.Default() }).bindPopup(popupContent, { minWidth: 280, maxWidth: 320 });
+
+            // ZMIANA: Pobieramy pogodę przy otwarciu dymka
+            marker.on('popupopen', () => {
+                loadNote(attr.id);
+                fetchWeather(attr.coords[0], attr.coords[1], `weather-${attr.id}`);
+            });
+            // Koniec zmiany
+
+            if (attr.category === 'view') viewpointsLayer.addLayer(marker); else if (attr.category === 'water') waterLayer.addLayer(marker); else if (attr.category === 'culture') cultureLayer.addLayer(marker); else if (attr.category === 'food') foodLayer.addLayer(marker);
+            markerRegistry[attr.id] = marker;
+        });
+
+        // --- Krok 8: Dodanie warstw do mapy ---
+        markerClusterGroup.addLayer(viewpointsLayer); markerClusterGroup.addLayer(waterLayer);
+        markerClusterGroup.addLayer(cultureLayer); markerClusterGroup.addLayer(foodLayer);
+        map.addLayer(markerClusterGroup);
+
+        // ZMIANA: Dodajemy przełącznik warstw bazowych (Standard/Teren)
+        const baseLayers = {
+            "Mapa Standardowa": osmLayer,
+            "Mapa Terenu": terrainLayer
+        };
+        const overlayLayers = {
+            "🌅 Punkty Widokowe": viewpointsLayer, "♨️ Woda i Termy": waterLayer,
+            "🏛️ Kultura i Inne": cultureLayer, "🍽️ Jedzenie": foodLayer
+        };
+        L.control.layers(baseLayers, overlayLayers, { collapsed: false }).addTo(map);
+        // Koniec zmiany
+
+        viewpointsLayer.addTo(map); waterLayer.addTo(map); cultureLayer.addTo(map); foodLayer.addTo(map);
+        L.control.scale({ imperial: false, metric: true }).addTo(map);
+
+        // --- Krok 9: Logika Geolokalizacji (bez zmian) ---
+        const locateBtn = document.getElementById('locate-btn'); let locationMarker, locationCircle; locateBtn.addEventListener('click', () => { locateBtn.textContent = 'Lokalizowanie...'; locateBtn.disabled = true; map.locate({ setView: true, maxZoom: 15 }); }); map.on('locationfound', (e) => { if (locationMarker) { map.removeLayer(locationMarker); map.removeLayer(locationCircle); } const radius = e.accuracy / 2; locationMarker = L.marker(e.latlng).addTo(map).bindPopup(`Jesteś (mniej więcej) tutaj.<br>Dokładność: ${radius.toFixed(0)} m`).openPopup(); locationCircle = L.circle(e.latlng, radius).addTo(map); locateBtn.textContent = 'Pokaż moją lokalizację 📍'; locateBtn.disabled = false; }); map.on('locationerror', (e) => { alert("Nie udało się pobrać lokalizacji: " + e.message ); locateBtn.textContent = 'Pokaż moją lokalizację 📍'; locateBtn.disabled = false; });
+
+        // --- Krok 10: "Terminator" (bez zmian) ---
+        const terminator = L.terminator({ fillOpacity: 0.3, color: '#333', weight: 0 }).addTo(map); setInterval(() => terminator.setTime(), 60000);
+
+        // --- Krok 11: Drag & Drop (bez zmian) ---
+        let draggedItem = null; routeListUI.addEventListener('dragstart', (e) => { draggedItem = e.target; e.target.classList.add('dragging'); }); routeListUI.addEventListener('dragend', (e) => { if(draggedItem) draggedItem.classList.remove('dragging'); draggedItem = null; }); routeListUI.addEventListener('dragover', (e) => { e.preventDefault(); const target = e.target.closest('li'); if (target && target !== draggedItem) { const rect = target.getBoundingClientRect(); const offset = e.clientY - rect.top - (rect.height / 2); if (offset < 0) { routeListUI.insertBefore(draggedItem, target); } else { routeListUI.insertBefore(draggedItem, target.nextSibling); } } }); routeListUI.addEventListener('drop', (e) => { e.preventDefault(); if (!draggedItem) return; draggedItem.classList.remove('dragging'); const newIdOrder = Array.from(routeListUI.querySelectorAll('li')).map(li => li.dataset.id); allPlans[activePlanIndex].waypoints.sort((a, b) => newIdOrder.indexOf(a.id) - newIdOrder.indexOf(b.id)); updateRouteList(); });
+
+        // --- Krok 12: Inicjalizacja UI ---
+        renderPlanTabs();
+        updateRouteList();
+
+        // --- Krok 13: NOWOŚĆ: Rejestracja Service Workera ---
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js') // Rejestrujemy plik sw.js
+                    .then(registration => {
+                        console.log('Service Worker zarejestrowany:', registration);
+                        // Prosty sposób informowania użytkownika, że strona działa offline
+                        if (!navigator.onLine) {
+                             alert("Jesteś offline. Mapa może działać w ograniczonym zakresie (korzysta z zapisanych danych).");
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Rejestracja Service Workera nie powiodła się:', error);
+                    });
+            });
+             // Logika wyświetlania info o PWA (opcjonalne)
+             window.addEventListener('beforeinstallprompt', (e) => {
+                 e.preventDefault(); // Zapobiegaj domyślnemu promptowi
+                 // Możesz zapisać event i pokazać własny przycisk instalacji
+                 console.log('beforeinstallprompt event fired');
+                 pwaInstallInfo.style.display = 'block'; // Pokaż info
+             });
+        }
+        // --- Koniec nowości ---
+
+        console.log("Mapa 'Magia 100%' gotowa!");
+
+    </script>
+</body>
+</html> 
